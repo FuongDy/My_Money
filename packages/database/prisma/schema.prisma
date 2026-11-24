@@ -1,0 +1,209 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum AccountType {
+  DAILY
+  SAVINGS
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+  TRANSFER
+}
+
+enum TransactionNature {
+  ESSENTIAL     // Thiết yếu (Cơm trưa, điện thoại, xăng, tiền nhà)
+  FLEXIBLE      // Linh hoạt (Cà phê, trà sữa, mua sắm vặt)
+  UNEXPECTED    // Phát sinh (Sửa xe, thuốc men, đám cưới)
+}
+
+enum TransactionSource {
+  MANUAL
+  AUTO_ANDROID_NOTIF
+  AUTO_IOS_SHORTCUT
+  BANK_WEBHOOK
+  RECURRING
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum RecurringFrequency {
+  DAILY
+  WEEKDAY
+  WEEKEND
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+enum CycleStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model User {
+  id                String       @id @default(uuid())
+  email             String       @unique
+  passwordHash      String
+  fullName          String
+  avatarUrl         String?
+  webhookSecretKey  String       @unique @default(uuid()) // Token riêng để iOS Shortcuts & Bank Webhook đẩy về
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  devices           UserDevice[]
+  accounts          Account[]
+  cycles            Cycle[]
+  transactions      Transaction[]
+  recurringRules    RecurringRule[]
+  categories        Category[]
+
+  @@map("users")
+}
+
+model UserDevice {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     DevicePlatform
+  deviceName   String
+  fcmToken     String         @unique
+  isActive     Boolean        @default(true)
+  lastActiveAt DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+
+  @@index([userId])
+  @@map("user_devices")
+}
+
+model Account {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  type           AccountType
+  currentBalance Decimal       @default(0) @db.Decimal(14, 2)
+  bankName       String?
+  accountNumber  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  transactionsFrom Transaction[] @relation("FromAccount")
+  transactionsTo   Transaction[] @relation("ToAccount")
+  recurringRules   RecurringRule[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Cycle {
+  id                String       @id @default(uuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String       // VD: "Kỳ 25/11 - 24/12"
+  startDate         DateTime     @db.Date
+  endDate           DateTime     @db.Date
+  dailySpendLimit   Decimal      @default(150000) @db.Decimal(12, 2) // Hạn mức tiêu hằng ngày
+  dailySavingTarget Decimal      @default(30000) @db.Decimal(12, 2)  // Mục tiêu tiết kiệm (30K/ngày)
+  status            CycleStatus  @default(ACTIVE)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([userId, status])
+  @@map("cycles")
+}
+
+model Category {
+  id            String             @id @default(uuid())
+  userId        String?            // Null nghĩa là danh mục mặc định của hệ thống
+  user          User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  icon          String             // Icon name (VD: "utensils", "coffee", "car", "shopping-bag")
+  color         String             // Mã HEX màu để vẽ chart (VD: "#F59E0B", "#10B981")
+  defaultNature TransactionNature  @default(ESSENTIAL)
+  isSystem      Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+
+  transactions  Transaction[]
+  recurringRules RecurringRule[]
+
+  @@index([userId])
+  @@map("categories")
+}
+
+model Transaction {
+  id           String             @id @default(uuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  accountId    String
+  account      Account            @relation("FromAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  
+  toAccountId  String?            // Dùng khi type = TRANSFER (VD: Chuyển 30K sang TK Tiết kiệm)
+  toAccount    Account?           @relation("ToAccount", fields: [toAccountId], references: [id], onDelete: SetNull)
+  
+  categoryId   String?
+  category     Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  type         TransactionType    @default(EXPENSE)
+  amount       Decimal            @db.Decimal(14, 2)
+  occurredAt   DateTime           @default(now())
+  nature       TransactionNature  @default(ESSENTIAL)
+  note         String?
+  source       TransactionSource  @default(MANUAL)
+  status       TransactionStatus  @default(CONFIRMED)
+  rawPayload   String?            @db.Text // Chuỗi tin nhắn ngân hàng gốc để đối soát
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([userId, occurredAt])
+  @@index([userId, status])
+  @@index([userId, type])
+  @@map("transactions")
+}
+
+model RecurringRule {
+  id          String             @id @default(uuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  accountId   String
+  account     Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  categoryId  String?
+  category    Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  title       String
+  amount      Decimal            @db.Decimal(14, 2)
+  type        TransactionType    @default(EXPENSE)
+  nature      TransactionNature  @default(ESSENTIAL)
+  frequency   RecurringFrequency @default(DAILY)
+  dayOfMonth  Int?               // Ngày trong tháng (1 - 31)
+  dayOfWeek   Int?               // Thứ trong tuần (0: CN, 1: T2, ..., 6: T7)
+  monthOfYear Int?               // Tháng trong năm (1 - 12)
+  isActive    Boolean            @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([userId, isActive])
+  @@map("recurring_rules")
+}

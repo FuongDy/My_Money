@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: saving-money-backend
+    env: node
+    plan: free
+    region: singapore
+    buildCommand: npm install && npm run build:backend
+    startCommand: npm run start:backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

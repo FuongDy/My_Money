@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "SavingMoney",
+    "slug": "saving-money",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#4f46e5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.savingmoney.app"
+    },
+    "android": {
+      "package": "com.savingmoney.app"
+    }
+  }
+}

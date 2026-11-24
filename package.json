@@ -1,0 +1,29 @@
+{
+  "name": "saving-money-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-platform Personal Finance & Saving Management (Expo + Next.js + NestJS + Neon DB)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run start:dev --workspace=apps/backend",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "build:packages": "npm run build --workspace=packages/shared-types && npm run generate --workspace=packages/database && npm run build --workspace=packages/database",
+    "build:backend": "npm run build:packages && npm run build --workspace=apps/backend",
+    "start:backend": "npm run start:prod --workspace=apps/backend",
+    "db:generate": "npm run generate --workspace=packages/database",
+    "db:push": "npm run push --workspace=packages/database",
+    "db:studio": "npm run studio --workspace=packages/database",
+    "db:seed": "npm run seed --workspace=packages/database"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3"
+  }
+}
